@@ -1,0 +1,189 @@
+index.html
+game.js
+style.css
+/scripts/
+MyVoxelAdventure/
+│
+├── index.html
+├── main.js
+├── game.js
+├── style.css
+│
+├── scripts/
+│   ├── engine/
+│   │   ├── worldGenerator.js
+│   │   ├── caveSystem.js
+│   │   ├── portals.js
+│   │   ├── mobSystem.js
+│   │   ├── crafting.js
+│   │   ├── newRealm.js
+│   │   ├── npc.js
+│   │   └── questSystem.js
+│   ├── ui/
+│   │   ├── menu.js
+│   │   ├── hud.js
+│   │   └── inventory.js
+│   └── utils/
+│       └── saveManager.js
+│
+└── assets/
+    ├── textures/
+    └── music/
+body {
+  margin: 0;
+  background: #1e1e1e;
+  color: white;
+  font-family: monospace;
+  overflow: hidden;
+}
+
+#menu {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(#222, #000);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+button {
+  margin: 10px;
+  padding: 10px 20px;
+  font-size: 18px;
+  background: #444;
+  border: 2px solid #888;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 10px;
+}
+button:hover { background: #666; }
+import { Game } from "./game.js";
+import { Menu } from "./scripts/ui/menu.js";
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const menu = new Menu(startGame);
+
+function startGame(playerName) {
+  menu.hide();
+  const game = new Game(canvas, ctx, playerName);
+  game.start();
+}
+import { WorldGenerator } from "./scripts/engine/worldGenerator.js";
+import { CaveSystem } from "./scripts/engine/caveSystem.js";
+import { PortalSystem } from "./scripts/engine/portals.js";
+import { MobSystem } from "./scripts/engine/mobSystem.js";
+import { Crafting } from "./scripts/engine/crafting.js";
+import { NewRealm } from "./scripts/engine/newRealm.js";
+import { SaveManager } from "./scripts/utils/saveManager.js";
+import { HUD } from "./scripts/ui/hud.js";
+import { Inventory } from "./scripts/ui/inventory.js";
+
+export class Game {
+  constructor(canvas, ctx, playerName) {
+    this.canvas = canvas;
+    this.ctx = ctx;
+    this.player = { x: 0, y: 0, interactPressed: false, inventory: new Inventory() };
+    this.world = new WorldGenerator();
+    this.caves = new CaveSystem();
+    this.portals = new PortalSystem();
+    this.mobs = new MobSystem(this.player);
+    this.crafting = new Crafting(this.player);
+    this.newRealm = null;
+    this.hud = new HUD(this.player);
+    this.save = new SaveManager(playerName);
+    this.running = true;
+    this.worldManager = { currentWorld: "Principal" };
+  }
+
+  start() {
+    this.loop();
+    this.music = new Audio("./assets/music/theme.mp3");
+    this.music.loop = true;
+    this.music.volume = 0.4;
+    this.music.play();
+  }
+
+  loop() {
+    if (!this.running) return;
+    this.update();
+    this.render();
+    requestAnimationFrame(() => this.loop());
+  }
+
+  update() {
+    if (this.worldManager.currentWorld === "Principal") {
+      this.world.update(this.player);
+      this.caves.update(this.player);
+      this.portals.update(this.player);
+      this.mobs.update();
+    }
+
+    if (this.worldManager.currentWorld === "NewRealm" && this.newRealm)
+      this.newRealm.update(0.016, this.player);
+
+    if (this.portals.toChronos && this.player.interactPressed) {
+      this.worldManager.currentWorld = "NewRealm";
+      this.newRealm = new NewRealm(this.player.inventory);
+    }
+  }
+
+  render() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    if (this.worldManager.currentWorld === "Principal") {
+      this.world.render(this.ctx);
+      this.caves.render(this.ctx);
+      this.portals.render(this.ctx);
+      this.mobs.render(this.ctx);
+    }
+
+    if (this.worldManager.currentWorld === "NewRealm" && this.newRealm)
+      this.newRealm.render(this.ctx, this.player.x, this.player.y);
+
+    this.hud.render(this.ctx);
+  }
+}
+export class MobSystem {
+  constructor(player) {
+    this.player = player;
+    this.mobs = [];
+    this.spawnInitialMobs();
+  }
+
+  spawnInitialMobs() {
+    this.mobs.push({ type: "Mouton", x: 150, y: 200, hp: 10, passive: true });
+    this.mobs.push({ type: "Vache", x: 300, y: 220, hp: 12, passive: true });
+    this.mobs.push({ type: "Sanglier", x: 400, y: 250, hp: 15, passive: true });
+  }
+
+  update() {
+    this.mobs.forEach(mob => {
+      if (mob.hp <= 0) this.dropLoot(mob);
+    });
+  }
+
+  dropLoot(mob) {
+    let loot;
+    switch (mob.type) {
+      case "Mouton": loot = "Laine"; break;
+      case "Vache": loot = "Cuir"; break;
+      case "Sanglier": loot = "Viande crue"; break;
+      default: loot = "Rien";
+    }
+    this.player.inventory.addItem(loot, 1);
+    mob.hp = -999; // Supprime du monde
+  }
+
+  render(ctx) {
+    this.mobs.forEach(mob => {
+      if (mob.hp > 0) {
+        ctx.fillStyle = mob.passive ? "#00ff00" : "#ff0000";
+        ctx.fillRect(mob.x, mob.y, 20, 20);
+      }
+    });
+  }
+}
